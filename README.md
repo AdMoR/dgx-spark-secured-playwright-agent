@@ -171,6 +171,57 @@ Stops the container, kills all host-side processes (Xvfb, x11vnc, noVNC, socat) 
 
 ---
 
+## Running the local LLM
+
+The agent talks to a local LLM via the llama.cpp HTTP server, which must be running on the host at `10.95.99.1:8081` (the LXD bridge IP, reachable from inside any container).
+
+### Start Qwen3.5 35B
+
+```bash
+export LLAMA_CACHE='unsloth/Qwen3.6-35B-A3B-GGUF'
+./llama.cpp/llama-server \
+    -hf unsloth/Qwen3.6-35B-A3B-GGUF:UD-Q4_K_XL \
+    --temp 0.2 \
+    --top-p 0.95 \
+    --top-k 20 \
+    --ctx-size 128000 \
+    --min-p 0.00 \
+    --reasoning off \
+    --host 0.0.0.0 \
+    --port 8081
+```
+
+Or as a one-liner via the alias (add to `~/.bashrc` to persist):
+
+```bash
+alias qwen3.6_start="export LLAMA_CACHE='unsloth/Qwen3.6-35B-A3B-GGUF' && ./llama.cpp/llama-server -hf unsloth/Qwen3.6-35B-A3B-GGUF:UD-Q4_K_XL --temp 0.2 --top-p 0.95 --top-k 20 --ctx-size 128000 --min-p 0.00 --reasoning off --host 0.0.0.0 --port 8081"
+qwen3.6_start
+```
+
+### Key parameters explained
+
+| Parameter | Value | Why |
+|---|---|---|
+| `-hf unsloth/Qwen3.6-35B-A3B-GGUF:UD-Q4_K_XL` | HuggingFace model + quant | Downloads/caches the model on first run; `UD-Q4_K_XL` is a 4-bit quantization that fits in GPU memory while preserving quality |
+| `LLAMA_CACHE` | model directory | Controls where llama.cpp stores downloaded model files |
+| `--ctx-size 128000` | 128 K tokens | Full context window of the model; allows long coding sessions without truncation |
+| `--temp 0.2` | low temperature | Keeps outputs focused and deterministic — good for code generation |
+| `--top-p 0.95 / --top-k 20` | sampling limits | Narrow the token candidates to likely choices; reduces hallucination |
+| `--min-p 0.00` | no min probability filter | Disabled here; top-p/top-k already do the filtering |
+| `--reasoning off` | disable CoT | Suppresses the internal chain-of-thought scratchpad in the response |
+| `--host 0.0.0.0` | all interfaces | Makes the server reachable from inside LXD containers via `10.95.99.1:8081` |
+| `--port 8081` | fixed port | Matches the LXD ACL rule and the URL hardcoded in container cloud-init |
+
+### What `LLAMA_CACHE` does
+
+`LLAMA_CACHE` is an environment variable that llama.cpp reads to decide where to store models downloaded from HuggingFace. Without it, llama.cpp defaults to `~/.cache/llama.cpp`. Setting it to the model directory means the first `-hf` run downloads the GGUF file there; subsequent runs reuse the cached file without re-downloading.
+
+### Connecting from inside a container
+
+The LXD network ACL (`agent-egress`) explicitly allows outbound traffic on port 8081 to the host. Inside any container, the host is reachable at `10.95.99.1`. opencode is pre-configured to use `http://10.95.99.1:8081` as its LLM endpoint via cloud-init, so no manual configuration is needed after starting the server.
+
+---
+
 ## Files
 
 | File | Role |

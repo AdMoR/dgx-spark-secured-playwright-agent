@@ -104,7 +104,7 @@ echo "    Chromium ready (PID $CHROMIUM_PID)"
 
 # --- x11vnc ---
 echo "==> starting x11vnc (:$DISPLAY_NUM -> VNC :$VNC_PORT)"
-x11vnc -display ":$DISPLAY_NUM" -rfbport "$VNC_PORT" -localhost -forever -nopw -quiet \
+x11vnc -display ":$DISPLAY_NUM" -rfbport "$VNC_PORT" -localhost -forever -nopw -quiet -shared \
     &>/tmp/agent-x11vnc-$NAME.log &
 X11VNC_PID=$!
 sleep 0.5
@@ -158,10 +158,14 @@ sg lxd -c "lxc exec $CONTAINER -- systemctl restart ttyd-opencode.service"
 
 IP=$(sg lxd -c "lxc list $CONTAINER --format csv -c 4" | grep -oP '(\d+\.){3}\d+' || true)
 HOST_IP=$(ip route get 8.8.8.8 2>/dev/null | grep -oP 'src \K[\d.]+' | head -1 || hostname -I | awk '{print $1}')
+TAILSCALE_IP=$(ip addr show tailscale0 2>/dev/null | grep -oP 'inet \K[\d.]+' || true)
 
 echo ""
 echo "Agent '$NAME' is up — slot $SLOT"
-echo "  Browser (noVNC) : http://$HOST_IP:$NOVNC_PORT/vnc.html"
+echo "  Browser (noVNC) : http://$HOST_IP:$NOVNC_PORT/vnc.html?host=$HOST_IP&port=$NOVNC_PORT&autoconnect=1"
+if [ -n "$TAILSCALE_IP" ]; then
+echo "  Browser (noVNC) : http://$TAILSCALE_IP:$NOVNC_PORT/vnc.html?host=$TAILSCALE_IP&port=$NOVNC_PORT&autoconnect=1  ← Tailscale"
+fi
 echo "  opencode TUI    : http://$IP:7681"
 echo "  opencode API    : http://$IP:4096"
 echo ""
